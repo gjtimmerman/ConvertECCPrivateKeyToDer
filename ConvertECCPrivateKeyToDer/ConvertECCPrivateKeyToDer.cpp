@@ -2,19 +2,14 @@
 //
 
 #include <iostream>
+#include <windows.h>
+#include <ncrypt.h>
 
-int main()
+int main(int argc, char *argv[])
 {
-    std::cout << "Hello World!\n";
+	if (argc != 3)
+		std::cout << "Usage: " << argv[0] << " subjectName password" << std::endl;
+	HCERTSTORE certStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, X509_ASN_ENCODING, NULL, CERT_SYSTEM_STORE_CURRENT_USER | CERT_STORE_READONLY_FLAG, L"My");
+	CertCloseStore(certStore, 0);
 }
 
-// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
-// Debug program: F5 or Debug > Start Debugging menu
-
-// Tips for Getting Started: 
-//   1. Use the Solution Explorer window to add/manage files
-//   2. Use the Team Explorer window to connect to source control
-//   3. Use the Output window to see build output and other messages
-//   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
-//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
