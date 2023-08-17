@@ -123,34 +123,35 @@ int main(int argc, char *argv[])
 
 	BCRYPT_ECCKEY_BLOB *pKeyBlob = NULL;
 	NCryptBufferDesc bufferDesc;
-	bufferDesc.cBuffers = 1;
-	bufferDesc.pBuffers = new BCryptBuffer[1];
-	bufferDesc.ulVersion = BCRYPTBUFFER_VERSION;
+	bufferDesc.cBuffers = 3;
+	bufferDesc.pBuffers = new NCryptBuffer[3];
+	bufferDesc.ulVersion = NCRYPTBUFFER_VERSION;
 	bufferDesc.pBuffers[0].BufferType = NCRYPTBUFFER_PKCS_SECRET;
 	bufferDesc.pBuffers[0].pvBuffer = (PVOID)L"Pa$$w0rd";
 	bufferDesc.pBuffers[0].cbBuffer = 18;
-	//bufferDesc.pBuffers[1].BufferType = NCRYPTBUFFER_PKCS_ALG_OID;
-	//bufferDesc.pBuffers[1].pvBuffer = (void*)szOID_NIST_AES128_WRAP;
-	//bufferDesc.pBuffers[1].cbBuffer = strlen((const char *)bufferDesc.pBuffers[1].pvBuffer) + 1;
-	//CRYPT_PKCS12_PBE_PARAMS *pbeParams = (CRYPT_PKCS12_PBE_PARAMS *)malloc(sizeof(CRYPT_PKCS12_PBE_PARAMS) + 16);
-	//pbeParams->cbSalt = 16;
-	//pbeParams->iIterations = 100000;
-	//char* salt = ((char *)pbeParams) + sizeof(CRYPT_PKCS12_PBE_PARAMS);
-	//for (int i = 0; i < 16; i++)
-	//{
-	//	salt[i] = i;
-	//}
-	//bufferDesc.pBuffers[2].pvBuffer = pbeParams;
-	//bufferDesc.pBuffers[2].cbBuffer = sizeof(CRYPT_PKCS12_PBE_PARAMS);
-	//bufferDesc.pBuffers[2].BufferType = NCRYPTBUFFER_PKCS_ALG_PARAM;
+	bufferDesc.pBuffers[1].BufferType = NCRYPTBUFFER_PKCS_ALG_OID;
+//	bufferDesc.pBuffers[1].pvBuffer = (void*)szOID_NIST_AES128_WRAP;
+	bufferDesc.pBuffers[1].pvBuffer = (void*)"1.2.840.10045.2.1";
+	bufferDesc.pBuffers[1].cbBuffer = strlen((const char *)bufferDesc.pBuffers[1].pvBuffer) + 1;
+	CRYPT_PKCS12_PBE_PARAMS *pbeParams = (CRYPT_PKCS12_PBE_PARAMS *)malloc(sizeof(CRYPT_PKCS12_PBE_PARAMS) + 16);
+	pbeParams->cbSalt = 16;
+	pbeParams->iIterations = 100000;
+	char* salt = ((char *)pbeParams) + sizeof(CRYPT_PKCS12_PBE_PARAMS);
+	for (int i = 0; i < 16; i++)
+	{
+		salt[i] = i;
+	}
+	bufferDesc.pBuffers[2].pvBuffer = pbeParams;
+	bufferDesc.pBuffers[2].cbBuffer = sizeof(CRYPT_PKCS12_PBE_PARAMS);
+	bufferDesc.pBuffers[2].BufferType = NCRYPTBUFFER_PKCS_ALG_PARAM;
 
 	//bufferDesc.pBuffers[1].BufferType = NCRYPTBUFFER_CERT_BLOB;
 	//bufferDesc.pBuffers[1].cbBuffer = certBlob.cbData;
 	//bufferDesc.pBuffers[1].pvBuffer = certBlob.pbData;
 	
-	status = NCryptExportKey(keyHandle, nKeyHandle2, BCRYPT_ECCPRIVATE_BLOB, &bufferDesc, NULL, 0, &cbResult, 0);
+	status = NCryptExportKey(keyHandle, NULL, NCRYPT_PKCS8_PRIVATE_KEY_BLOB, &bufferDesc, NULL, 0, &cbResult, 0);
 	pKeyBlob = (BCRYPT_ECCKEY_BLOB*)new char[cbResult];
-	status = NCryptExportKey(keyHandle, nKeyHandle2, BCRYPT_ECCPRIVATE_BLOB, &bufferDesc, (PBYTE)pKeyBlob, cbResult, &cbResult, 0);
+	status = NCryptExportKey(keyHandle, NULL, NCRYPT_PKCS8_PRIVATE_KEY_BLOB, &bufferDesc, (PBYTE)pKeyBlob, cbResult, &cbResult, 0);
 	if (evaluateStatus(status) != 0)
 	{
 		CertFreeCertificateContext(pContext);
