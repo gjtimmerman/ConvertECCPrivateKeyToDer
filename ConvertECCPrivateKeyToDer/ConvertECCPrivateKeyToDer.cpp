@@ -3,7 +3,33 @@
 
 #include <iostream>
 #include <windows.h>
+#include <bcrypt.h>
 #include <ncrypt.h>
+
+int evaluateBStatus(NTSTATUS status)
+{
+	if (status == ERROR_SUCCESS)
+		return 0;
+	switch (status)
+	{
+	case STATUS_INVALID_HANDLE:
+		fprintf(stderr, "Cryptographic functionr returned error code: STATUS_INVALID_HANDLE");
+		return 1;
+	case STATUS_INVALID_PARAMETER:
+		fprintf(stderr, "Cryptographic function returned error code: STATUS_INVALID_PARAMETER");
+		return 1;
+	case STATUS_NO_MEMORY:
+		fprintf(stderr, "Cryptographic function returned error code: STATUS_NO_MEMORY");
+		return 1;
+
+	default:
+		fprintf(stderr, "Cryptographic function returned unknown error code");
+		return 1;
+
+	}
+
+}
+
 
 int evaluateStatus(SECURITY_STATUS status)
 {
@@ -56,7 +82,7 @@ int main(int argc, char *argv[])
 	DWORD cbResult;
 
 
-	void *pKeyBlob = NULL;
+	unsigned char *pKeyBlob = NULL;
 	NCryptBufferDesc bufferDesc;
 	bufferDesc.cBuffers = 3;
 	bufferDesc.pBuffers = new NCryptBuffer[3];
@@ -66,23 +92,25 @@ int main(int argc, char *argv[])
 	bufferDesc.pBuffers[0].cbBuffer = 18;
 	bufferDesc.pBuffers[1].BufferType = NCRYPTBUFFER_PKCS_ALG_OID;
 	bufferDesc.pBuffers[1].pvBuffer = (void*)"1.2.840.113549.1.12.1.3";
+//	bufferDesc.pBuffers[1].pvBuffer = (void*)"1.2.840.113549.1.5.13";
 
-	  bufferDesc.pBuffers[1].cbBuffer = strlen((const char *)bufferDesc.pBuffers[1].pvBuffer) + 1;
-	CRYPT_PKCS12_PBE_PARAMS *pbeParams = (CRYPT_PKCS12_PBE_PARAMS *)malloc(sizeof(CRYPT_PKCS12_PBE_PARAMS) + 8);
-	pbeParams->cbSalt = 8;
-	pbeParams->iIterations = 1024;
-	char* salt = ((char *)pbeParams) + sizeof(CRYPT_PKCS12_PBE_PARAMS);
-	for (int i = 0; i < 8; i++)
+
+	bufferDesc.pBuffers[1].cbBuffer = strlen((const char *)bufferDesc.pBuffers[1].pvBuffer) + 1;
+	CRYPT_PKCS12_PBE_PARAMS *pbeParams = (CRYPT_PKCS12_PBE_PARAMS *)malloc(sizeof(CRYPT_PKCS12_PBE_PARAMS) + 32);
+	pbeParams->cbSalt = 32;
+	pbeParams->iIterations = 1000;
+	char* pSalt = ((char *)pbeParams) + sizeof(CRYPT_PKCS12_PBE_PARAMS);
+	for (int i = 0; i < 32; i++)
 	{
-		salt[i] = i;
+		pSalt[i] = i;
 	}
 	bufferDesc.pBuffers[2].pvBuffer = pbeParams;
-	bufferDesc.pBuffers[2].cbBuffer = sizeof(CRYPT_PKCS12_PBE_PARAMS) + 8;
+	bufferDesc.pBuffers[2].cbBuffer = sizeof(CRYPT_PKCS12_PBE_PARAMS) + 32;
 	bufferDesc.pBuffers[2].BufferType = NCRYPTBUFFER_PKCS_ALG_PARAM;
 
 	
 	status = NCryptExportKey(keyHandle, NULL, NCRYPT_PKCS8_PRIVATE_KEY_BLOB, &bufferDesc, NULL, 0, &cbResult, 0);
-	pKeyBlob = new char[cbResult];
+	pKeyBlob = new unsigned char[cbResult];
 	status = NCryptExportKey(keyHandle, NULL, NCRYPT_PKCS8_PRIVATE_KEY_BLOB, &bufferDesc, (PBYTE)pKeyBlob, cbResult, &cbResult, 0);
 	if (evaluateStatus(status) != 0)
 	{
@@ -97,6 +125,55 @@ int main(int argc, char *argv[])
 	HANDLE myFile = CreateFile(L"MyKeyBlob", GENERIC_WRITE, 0, NULL, 1, FILE_ATTRIBUTE_NORMAL, 0);
 	DWORD written;
 	WriteFile(myFile, pKeyBlob, cbResult, &written, NULL);
+	FlushFileBuffers(myFile);
 	CloseHandle(myFile);
+
+
+	NTSTATUS bStatus;
+	BCRYPT_ALG_HANDLE algHandle;
+	char salt[32];
+	for (int i = 0; i < 32; i++)
+		salt[i] = i;
+	unsigned char iv[8] = {};
+	BCRYPT_KEY_HANDLE derivedKeyHandle;
+	bStatus = BCryptOpenAlgorithmProvider(&algHandle, BCRYPT_SHA1_ALGORITHM, 0, BCRYPT_ALG_HANDLE_HMAC_FLAG);
+	if (evaluateBStatus(bStatus) != 0)
+		return 0;
+	char keyData[sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + 192/8];
+	wchar_t password[] = L"Pa$$w0rd";
+	bStatus = BCryptDeriveKeyPBKDF2(algHandle, (PUCHAR)L"Pa$$w0rd", 18, (PUCHAR)salt, 32, 100, (PUCHAR)keyData + sizeof(BCRYPT_KEY_DATA_BLOB_HEADER), 192 / 8, 0);
+	if (evaluateBStatus(bStatus) != 0)
+		return 0;
+	bStatus = BCryptCloseAlgorithmProvider(algHandle, 0);
+	if (evaluateBStatus(bStatus) != 0)
+		return 0;
+	bStatus = BCryptOpenAlgorithmProvider(&algHandle, BCRYPT_3DES_ALGORITHM, NULL, 0);
+	if (evaluateBStatus(bStatus) != 0)
+		return 0;
+	BCRYPT_KEY_DATA_BLOB_HEADER* pKeyDataHeader = (BCRYPT_KEY_DATA_BLOB_HEADER *)keyData;
+	pKeyDataHeader->dwMagic = BCRYPT_KEY_DATA_BLOB_MAGIC;
+	pKeyDataHeader->dwVersion = BCRYPT_KEY_DATA_BLOB_VERSION1;
+	pKeyDataHeader->cbKeyData = 192 / 8;
+	//for (int i = 0; i < 192 / 8; i++)
+	//{
+	//	keyData[sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + i] = myHardcodedKey[i];
+	//}
+	bStatus = BCryptImportKey(algHandle, NULL, BCRYPT_KEY_DATA_BLOB, &derivedKeyHandle, NULL, 0, (PUCHAR)keyData, sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + 192 / 8, 0);
+	if (evaluateBStatus(bStatus) != 0)
+		return 0;
+	unsigned char decrypted[168];
+	ULONG cbOutput = 0;
+	bStatus = BCryptDecrypt(derivedKeyHandle, pKeyBlob + 59, 168, NULL, iv, 8, decrypted, 168, &cbOutput, BCRYPT_PAD_PKCS1);
+	if (evaluateBStatus(bStatus) != 0)
+		return 0;
+
+	bStatus = BCryptDestroyKey(derivedKeyHandle);
+	if (evaluateBStatus(bStatus) != 0)
+		return 0;
+	bStatus = BCryptCloseAlgorithmProvider(algHandle, 0);
+	if (evaluateBStatus(bStatus) != 0)
+		return 0;
+
+	return 0;
 }
 
