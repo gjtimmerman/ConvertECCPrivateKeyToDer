@@ -122,7 +122,7 @@ int main(int argc, char *argv[])
 	}
 	CertFreeCertificateContext(pContext);
 	CertCloseStore(certStore, 0);
-	HANDLE myFile = CreateFile(L"MyKeyBlob", GENERIC_WRITE, 0, NULL, 1, FILE_ATTRIBUTE_NORMAL, 0);
+	HANDLE myFile = CreateFile(L"MyKeyBlob", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
 	DWORD written;
 	WriteFile(myFile, pKeyBlob, cbResult, &written, NULL);
 	FlushFileBuffers(myFile);
@@ -141,7 +141,14 @@ int main(int argc, char *argv[])
 		return 0;
 	char keyData[sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + 192/8];
 	wchar_t password[] = L"Pa$$w0rd";
-	bStatus = BCryptDeriveKeyPBKDF2(algHandle, (PUCHAR)L"Pa$$w0rd", 18, (PUCHAR)salt, 32, 100, (PUCHAR)keyData + sizeof(BCRYPT_KEY_DATA_BLOB_HEADER), 192 / 8, 0);
+	//unsigned char* passwordChars = (unsigned char*)password;
+	//for (int i = 0; i < 18; i+=2)
+	//{
+	//	unsigned char tmp = passwordChars[i];
+	//	passwordChars[i] = passwordChars[i + 1];
+	//	passwordChars[i + 1] = tmp;
+	//}
+	bStatus = BCryptDeriveKeyPBKDF2(algHandle, (PUCHAR)L"Pa$$w0rd", 18, (PUCHAR)salt, 32, 1000, (PUCHAR)keyData + sizeof(BCRYPT_KEY_DATA_BLOB_HEADER), 192 / 8, 0);
 	if (evaluateBStatus(bStatus) != 0)
 		return 0;
 	bStatus = BCryptCloseAlgorithmProvider(algHandle, 0);
@@ -154,16 +161,12 @@ int main(int argc, char *argv[])
 	pKeyDataHeader->dwMagic = BCRYPT_KEY_DATA_BLOB_MAGIC;
 	pKeyDataHeader->dwVersion = BCRYPT_KEY_DATA_BLOB_VERSION1;
 	pKeyDataHeader->cbKeyData = 192 / 8;
-	//for (int i = 0; i < 192 / 8; i++)
-	//{
-	//	keyData[sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + i] = myHardcodedKey[i];
-	//}
 	bStatus = BCryptImportKey(algHandle, NULL, BCRYPT_KEY_DATA_BLOB, &derivedKeyHandle, NULL, 0, (PUCHAR)keyData, sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + 192 / 8, 0);
 	if (evaluateBStatus(bStatus) != 0)
 		return 0;
 	unsigned char decrypted[168];
 	ULONG cbOutput = 0;
-	bStatus = BCryptDecrypt(derivedKeyHandle, pKeyBlob + 59, 168, NULL, iv, 8, decrypted, 168, &cbOutput, BCRYPT_PAD_PKCS1);
+	bStatus = BCryptDecrypt(derivedKeyHandle, pKeyBlob + 60, 168, NULL, iv, 8, decrypted, 168, &cbOutput, BCRYPT_PAD_PKCS1);
 	if (evaluateBStatus(bStatus) != 0)
 		return 0;
 
@@ -173,6 +176,10 @@ int main(int argc, char *argv[])
 	bStatus = BCryptCloseAlgorithmProvider(algHandle, 0);
 	if (evaluateBStatus(bStatus) != 0)
 		return 0;
+	HANDLE myFile2 = CreateFile(L"MyDecryptedKeyBlob", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+	WriteFile(myFile2, decrypted, cbOutput, &written, NULL);
+	FlushFileBuffers(myFile2);
+	CloseHandle(myFile2);
 
 	return 0;
 }
