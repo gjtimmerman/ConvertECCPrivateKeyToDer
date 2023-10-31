@@ -84,18 +84,27 @@ int main(int argc, char *argv[])
 
 	unsigned char *pKeyBlob = NULL;
 	NCryptBufferDesc bufferDesc;
-	bufferDesc.cBuffers = 3;
-	bufferDesc.pBuffers = new NCryptBuffer[3];
+	bufferDesc.cBuffers = 6;
+	bufferDesc.pBuffers = new NCryptBuffer[6];
 	bufferDesc.ulVersion = NCRYPTBUFFER_VERSION;
 	bufferDesc.pBuffers[0].BufferType = NCRYPTBUFFER_PKCS_SECRET;
 	bufferDesc.pBuffers[0].pvBuffer = (PVOID)L"Pa$$w0rd";
 	bufferDesc.pBuffers[0].cbBuffer = 18;
 	bufferDesc.pBuffers[1].BufferType = NCRYPTBUFFER_PKCS_ALG_OID;
-	bufferDesc.pBuffers[1].pvBuffer = (void*)"1.2.840.113549.1.12.1.3";
-//	bufferDesc.pBuffers[1].pvBuffer = (void*)"1.2.840.113549.1.5.13";
+//	bufferDesc.pBuffers[1].pvBuffer = (void*)"1.2.840.113549.1.12.1.3";
+	bufferDesc.pBuffers[1].pvBuffer = (void*)"1.2.840.113549.1.5.13";
+	bufferDesc.pBuffers[2].BufferType = NCRYPTBUFFER_PKCS_ALG_OID;
+	bufferDesc.pBuffers[2].pvBuffer = (void*)"1.2.840.113549.1.5.12";
+	bufferDesc.pBuffers[4].BufferType = NCRYPTBUFFER_PKCS_ALG_OID;
+	bufferDesc.pBuffers[4].pvBuffer = (void*)"1.2.840.113549.2.9";
+	bufferDesc.pBuffers[5].BufferType = NCRYPTBUFFER_PKCS_ALG_OID;
+	bufferDesc.pBuffers[5].pvBuffer = (void*)"2.16.840.1.101.3.4.1.2";
 
 
 	bufferDesc.pBuffers[1].cbBuffer = (ULONG)(strlen((const char *)bufferDesc.pBuffers[1].pvBuffer) + 1);
+	bufferDesc.pBuffers[2].cbBuffer = (ULONG)(strlen((const char*)bufferDesc.pBuffers[2].pvBuffer) + 1);
+	bufferDesc.pBuffers[4].cbBuffer = (ULONG)(strlen((const char*)bufferDesc.pBuffers[4].pvBuffer) + 1);
+	bufferDesc.pBuffers[5].cbBuffer = (ULONG)(strlen((const char*)bufferDesc.pBuffers[5].pvBuffer) + 1);
 	CRYPT_PKCS12_PBE_PARAMS *pbeParams = (CRYPT_PKCS12_PBE_PARAMS *)malloc(sizeof(CRYPT_PKCS12_PBE_PARAMS) + 32);
 	pbeParams->cbSalt = 32;
 	pbeParams->iIterations = 1000;
@@ -104,9 +113,9 @@ int main(int argc, char *argv[])
 	{
 		pSalt[i] = i;
 	}
-	bufferDesc.pBuffers[2].pvBuffer = pbeParams;
-	bufferDesc.pBuffers[2].cbBuffer = sizeof(CRYPT_PKCS12_PBE_PARAMS) + 32;
-	bufferDesc.pBuffers[2].BufferType = NCRYPTBUFFER_PKCS_ALG_PARAM;
+	bufferDesc.pBuffers[3].pvBuffer = pbeParams;
+	bufferDesc.pBuffers[3].cbBuffer = sizeof(CRYPT_PKCS12_PBE_PARAMS) + 32;
+	bufferDesc.pBuffers[3].BufferType = NCRYPTBUFFER_PKCS_ALG_PARAM;
 
 	
 	status = NCryptExportKey(keyHandle, NULL, NCRYPT_PKCS8_PRIVATE_KEY_BLOB, &bufferDesc, NULL, 0, &cbResult, 0);
