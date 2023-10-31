@@ -95,7 +95,7 @@ int main(int argc, char *argv[])
 //	bufferDesc.pBuffers[1].pvBuffer = (void*)"1.2.840.113549.1.5.13";
 
 
-	bufferDesc.pBuffers[1].cbBuffer = strlen((const char *)bufferDesc.pBuffers[1].pvBuffer) + 1;
+	bufferDesc.pBuffers[1].cbBuffer = (ULONG)(strlen((const char *)bufferDesc.pBuffers[1].pvBuffer) + 1);
 	CRYPT_PKCS12_PBE_PARAMS *pbeParams = (CRYPT_PKCS12_PBE_PARAMS *)malloc(sizeof(CRYPT_PKCS12_PBE_PARAMS) + 32);
 	pbeParams->cbSalt = 32;
 	pbeParams->iIterations = 1000;
@@ -140,15 +140,18 @@ int main(int argc, char *argv[])
 	if (evaluateBStatus(bStatus) != 0)
 		return 0;
 	char keyData[sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + 192/8];
-	wchar_t password[] = L"Pa$$w0rd";
+	wchar_t password[16] = L"Pa$$w0rd";
 	//unsigned char* passwordChars = (unsigned char*)password;
-	//for (int i = 0; i < 18; i+=2)
+
+	//for (int i = 0; i < 16; i+=2)
 	//{
 	//	unsigned char tmp = passwordChars[i];
 	//	passwordChars[i] = passwordChars[i + 1];
 	//	passwordChars[i + 1] = tmp;
 	//}
-	bStatus = BCryptDeriveKeyPBKDF2(algHandle, (PUCHAR)L"Pa$$w0rd", 18, (PUCHAR)salt, 32, 1000, (PUCHAR)keyData + sizeof(BCRYPT_KEY_DATA_BLOB_HEADER), 192 / 8, 0);
+
+
+	bStatus = BCryptDeriveKeyPBKDF2(algHandle, (PUCHAR)L"Pa$$w0rd", 16, (PUCHAR)salt, 32, 1000, (PUCHAR)keyData + sizeof(BCRYPT_KEY_DATA_BLOB_HEADER), 192 / 8, 0);
 	if (evaluateBStatus(bStatus) != 0)
 		return 0;
 	bStatus = BCryptCloseAlgorithmProvider(algHandle, 0);
