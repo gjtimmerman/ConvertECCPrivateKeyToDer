@@ -343,39 +343,41 @@ int main(int argc, char* argv[])
 
 	unsigned char* pKeyBlob = NULL;
 	NCryptBufferDesc bufferDesc;
-	bufferDesc.cBuffers = 2;
-	bufferDesc.pBuffers = new NCryptBuffer[2];
+	bufferDesc.cBuffers = 3;
+	bufferDesc.pBuffers = new NCryptBuffer[3];
 	bufferDesc.ulVersion = NCRYPTBUFFER_VERSION;
 	bufferDesc.pBuffers[0].BufferType = NCRYPTBUFFER_PKCS_SECRET;
 	bufferDesc.pBuffers[0].pvBuffer = (PVOID)password;
 	bufferDesc.pBuffers[0].cbBuffer = (ULONG)(wcslen(password)+1) * sizeof(wchar_t);
 	bufferDesc.pBuffers[1].BufferType = NCRYPTBUFFER_PKCS_ALG_OID;
 	bufferDesc.pBuffers[1].pvBuffer = (void*)"1.2.840.113549.1.12.1.3\0";
-//	bufferDesc.pBuffers[1].pvBuffer = (void*)"1.2.840.113549.1.5.12\0";
-//	bufferDesc.pBuffers[1].pvBuffer = (void*)"1.2.840.113549.2.9\0";
-//	bufferDesc.pBuffers[1].pvBuffer = (void*)"2.16.840.1.101.3.4.1.42\0";
 
 	bufferDesc.pBuffers[1].cbBuffer = (ULONG)(strlen((const char*)bufferDesc.pBuffers[1].pvBuffer) + 1);
-	//bufferDesc.pBuffers[2].BufferType = NCRYPTBUFFER_PKCS_ALG_OID;
-	//bufferDesc.pBuffers[2].pvBuffer = (void*)"1.2.840.113549.1.5.12\0";
-	//bufferDesc.pBuffers[2].cbBuffer = (ULONG)(strlen((const char*)bufferDesc.pBuffers[2].pvBuffer) + 1);
-	//bufferDesc.pBuffers[3].BufferType = NCRYPTBUFFER_PKCS_ALG_OID;
-	//bufferDesc.pBuffers[3].cbBuffer = (ULONG)(strlen((const char*)bufferDesc.pBuffers[3].pvBuffer) + 1);
-	//bufferDesc.pBuffers[4].BufferType = NCRYPTBUFFER_PKCS_ALG_OID;
-	//bufferDesc.pBuffers[4].cbBuffer = (ULONG)(strlen((const char*)bufferDesc.pBuffers[4].pvBuffer) + 1);
+	const DWORD saltLength = 16;  // 16 bytes is recommended
+	const DWORD iterationCount = 600000;  // OWASP 2023 recommendation for PBKDF2
 
 
-	//CRYPT_PKCS12_PBE_PARAMS *pbeParams = (CRYPT_PKCS12_PBE_PARAMS *)malloc(sizeof(CRYPT_PKCS12_PBE_PARAMS) + 16);
-	//pbeParams->cbSalt = 16;
-	//pbeParams->iIterations = 1000000;
-	//char* pSalt = ((char *)pbeParams) + sizeof(CRYPT_PKCS12_PBE_PARAMS);
-	//for (int i = 0; i < 16; i++)
-	//{
-	//	pSalt[i] = rand() % 256;
-	//}
-	//bufferDesc.pBuffers[2].pvBuffer = pbeParams;
-	//bufferDesc.pBuffers[2].cbBuffer = sizeof(CRYPT_PKCS12_PBE_PARAMS) + 16;
-	//bufferDesc.pBuffers[2].BufferType = NCRYPTBUFFER_PKCS_ALG_PARAM;
+	CRYPT_PKCS12_PBE_PARAMS *pbeParams = (CRYPT_PKCS12_PBE_PARAMS *)malloc(sizeof(CRYPT_PKCS12_PBE_PARAMS) + saltLength);
+	pbeParams->cbSalt = saltLength;
+	pbeParams->iIterations = iterationCount;
+	// Generate cryptographically secure random salt
+	unsigned char* pSalt = ((unsigned char*)pbeParams) + sizeof(CRYPT_PKCS12_PBE_PARAMS);
+	NTSTATUS ntStatus = BCryptGenRandom(NULL, pSalt, saltLength, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+	if (ntStatus != 0)
+	{
+		fprintf(stderr, "Failed to generate random salt\n");
+		free(pbeParams);
+		return -1;
+	}
+	fprintf(stderr, "\n=== PBE Parameters ===\n");
+	fprintf(stderr, "Salt (%d bytes): ", saltLength);
+	for (DWORD i = 0; i < saltLength; i++)
+		fprintf(stderr, "%02X ", pSalt[i]);
+	fprintf(stderr, "\nIterations: %d\n", iterationCount);
+
+	bufferDesc.pBuffers[2].pvBuffer = pbeParams;
+	bufferDesc.pBuffers[2].cbBuffer = sizeof(CRYPT_PKCS12_PBE_PARAMS) + saltLength;
+	bufferDesc.pBuffers[2].BufferType = NCRYPTBUFFER_PKCS_ALG_PARAM;
 
 
 //	status = NCryptExportKey(keyHandle, NULL, BCRYPT_ECCPRIVATE_BLOB, NULL, NULL, 0, &cbResult, 0);
@@ -650,6 +652,36 @@ int main(int argc, char* argv[])
 			{
 				fprintf(stderr, "=== Successfully decoded decrypted PrivateKeyInfo ===\n");
 				fprintf(stderr, "Algorithm OID: %s\n", pDecryptedKey->Algorithm.pszObjId);
+				// Decode ECC curve parameters
+				if (pDecryptedKey->Algorithm.Parameters.cbData > 0)
+				{
+					fprintf(stderr, "\n=== ECC Curve Parameters ===\n");
+					LPSTR *pszCurveOid = NULL;
+					DWORD cbCurveOid = 0;
+
+					if (CryptDecodeObjectEx(
+						X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
+						X509_OBJECT_IDENTIFIER,
+						pDecryptedKey->Algorithm.Parameters.pbData,
+						pDecryptedKey->Algorithm.Parameters.cbData,
+						CRYPT_DECODE_ALLOC_FLAG,
+						NULL,
+						&pszCurveOid,
+						&cbCurveOid))
+					{
+						fprintf(stderr, "Curve OID: %s", *pszCurveOid);
+
+						if (strcmp(*pszCurveOid, "1.2.840.10045.3.1.7") == 0)
+							fprintf(stderr, " (NIST P-256 / secp256r1)");
+						else if (strcmp(*pszCurveOid, "1.3.132.0.34") == 0)
+							fprintf(stderr, " (NIST P-384 / secp384r1)");
+						else if (strcmp(*pszCurveOid, "1.3.132.0.35") == 0)
+							fprintf(stderr, " (NIST P-521 / secp521r1)");
+
+						fprintf(stderr, "\n");
+						LocalFree(pszCurveOid);
+					}
+				}
 				fprintf(stderr, "Private key size: %d\n", pDecryptedKey->PrivateKey.cbData);
 				fprintf(stderr, "Number of attributes: %d\n", pDecryptedKey->pAttributes->cAttr);
 				fprintf(stderr, "Attributes OID: %s\n", pDecryptedKey->pAttributes->rgAttr[0].pszObjId);
@@ -677,6 +709,18 @@ int main(int argc, char* argv[])
 								for (DWORD i = 0; i < valueSize; i++)
 									fprintf(stderr, "%02X ", valueData[i]);
 								fprintf(stderr, "\n");
+								// the ASN.1 structure breakdown
+								if (valueSize >= 4 && valueData[0] == 0x03)
+								{
+									fprintf(stderr, "ASN.1 BIT STRING breakdown:\n");
+									fprintf(stderr, "  Tag: 0x%02X (BIT STRING)\n", valueData[0]);
+									fprintf(stderr, "  Length: %d bytes\n", valueData[1]);
+									fprintf(stderr, "  Unused bits: %d\n", valueData[2]);
+									fprintf(stderr, "  Data byte(s): ");
+									for (DWORD i = 3; i < valueSize; i++)
+										fprintf(stderr, "0x%02X ", valueData[i]);
+									fprintf(stderr, "\n");
+								}
 
 								// Decode as BIT STRING
 								CRYPT_BIT_BLOB* pKeyUsage = NULL;
