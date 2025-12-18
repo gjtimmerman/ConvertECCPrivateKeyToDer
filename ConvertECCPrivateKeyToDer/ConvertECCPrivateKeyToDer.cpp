@@ -402,7 +402,7 @@ int main(int argc, char* argv[])
 	}
 	CertFreeCertificateContext(pContext);
 	CertCloseStore(certStore, 0);
-	HANDLE myFile = CreateFile(L"MyKeyBlob", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+	HANDLE myFile = CreateFile(L"EncryptedKeyBlob.der", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
 	DWORD written;
 	WriteFile(myFile, pKeyBlob, cbResult, &written, NULL);
 	FlushFileBuffers(myFile);
@@ -628,7 +628,7 @@ int main(int argc, char* argv[])
 
 			
 			// Save the decrypted data as DER file
-			HANDLE hKeyFile = CreateFile(L"DecryptedPrivateKey.der", GENERIC_WRITE, 0, NULL,
+			HANDLE hKeyFile = CreateFile(L"DecryptedKey.der", GENERIC_WRITE, 0, NULL,
 				CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
 			WriteFile(hKeyFile, decrypted, cbOutput, &written, NULL);
 			CloseHandle(hKeyFile);
