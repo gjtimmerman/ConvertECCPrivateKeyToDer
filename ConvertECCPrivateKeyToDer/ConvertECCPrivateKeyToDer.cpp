@@ -267,7 +267,7 @@ int main(int argc, char* argv[])
 	size_t numBytes;
 	mbstowcs_s(&numBytes, wideSubjectName, (size_t)strlen(argv[1]) + 1, argv[1], (size_t)strlen(argv[1]));
 	fprintf(stderr, "Searching for certificate with subject: %S\n", wideSubjectName);
-	wchar_t password[18];
+	wchar_t* password= new wchar_t[strlen(argv[2]) + 1];
 	mbstowcs_s(&numBytes, password, (size_t)strlen(argv[2]) + 1, argv[2], (size_t)strlen(argv[2]));
 	PCCERT_CONTEXT pContext = CertFindCertificateInStore(certStore, X509_ASN_ENCODING, 0, CERT_FIND_SUBJECT_STR, wideSubjectName, NULL);
 	if (!pContext)
