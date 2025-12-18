@@ -442,7 +442,6 @@ int main(int argc, char* argv[])
 		NULL,
 		&pEncryptedKeyInfo,
 		&cbDecoded);
-	bool foundValid = false;
 
 	if (decodeResult && pEncryptedKeyInfo)
 	{
@@ -550,94 +549,277 @@ int main(int argc, char* argv[])
 				}
 
 			}
-		else
-		{
+			else
+			{
 
-			// Fall back to defaults
-			PKCS12_KDF(password, 16, NULL, 0, 0, 1,
-				(PUCHAR)keyData + sizeof(BCRYPT_KEY_DATA_BLOB_HEADER), 192 / 8);
-			PKCS12_KDF(password, 16, NULL, 0, 0, 2, iv, 8);
-		}
-
-
-		fprintf(stderr, "Derived 3DES Key (24 bytes): ");
-		for (int i = 0; i < 24; i++)
-			fprintf(stderr, "%02X ", ((unsigned char*)keyData)[sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + i]);
-		fprintf(stderr, "\n");
-
-		fprintf(stderr, "Derived IV (8 bytes): ");
-		for (int i = 0; i < 8; i++)
-			fprintf(stderr, "%02X ", iv[i]);
-		fprintf(stderr, "\n");
+				// Fall back to defaults
+				PKCS12_KDF(password, 16, NULL, 0, 0, 1,
+					(PUCHAR)keyData + sizeof(BCRYPT_KEY_DATA_BLOB_HEADER), 192 / 8);
+				PKCS12_KDF(password, 16, NULL, 0, 0, 2, iv, 8);
+			}
 
 
+			fprintf(stderr, "Derived 3DES Key (24 bytes): ");
+			for (int i = 0; i < 24; i++)
+				fprintf(stderr, "%02X ", ((unsigned char*)keyData)[sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + i]);
+			fprintf(stderr, "\n");
+
+			fprintf(stderr, "Derived IV (8 bytes): ");
+			for (int i = 0; i < 8; i++)
+				fprintf(stderr, "%02X ", iv[i]);
+			fprintf(stderr, "\n");
+
+			BCRYPT_KEY_DATA_BLOB_HEADER* pKeyDataHeader = (BCRYPT_KEY_DATA_BLOB_HEADER*)keyData;
+			pKeyDataHeader->dwMagic = BCRYPT_KEY_DATA_BLOB_MAGIC;
+			pKeyDataHeader->dwVersion = BCRYPT_KEY_DATA_BLOB_VERSION1;
+			pKeyDataHeader->cbKeyData = 192 / 8;
+
+			fprintf(stderr, "\nImporting 3DES key...\n");
+			fprintf(stderr, "Key header magic: 0x%08X\n", pKeyDataHeader->dwMagic);
+			fprintf(stderr, "Key header version: %d\n", pKeyDataHeader->dwVersion);
+			fprintf(stderr, "Key data length: %d bytes\n", pKeyDataHeader->cbKeyData);
+
+			fprintf(stderr, "Key1 (DES key 1): ");
+			for (int i = 0; i < 8; i++)
+				fprintf(stderr, "%02X ", ((unsigned char*)keyData)[sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + i]);
+			fprintf(stderr, "\nKey2 (DES key 2): ");
+			for (int i = 8; i < 16; i++)
+				fprintf(stderr, "%02X ", ((unsigned char*)keyData)[sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + i]);
+			fprintf(stderr, "\nKey3 (DES key 3): ");
+			for (int i = 16; i < 24; i++)
+				fprintf(stderr, "%02X ", ((unsigned char*)keyData)[sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + i]);
+			fprintf(stderr, "\n\n");
 
 
+			bStatus = BCryptImportKey(algHandle, NULL, BCRYPT_KEY_DATA_BLOB, &derivedKeyHandle, NULL, 0,
+				(PUCHAR)keyData, sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + 192 / 8, 0);
+			if (evaluateBStatus(bStatus) != 0)
+			{
+				fprintf(stderr, "BCryptImportKey failed\n");
+				LocalFree(pEncryptedKeyInfo);
+				return 0;
+			}
+
+			fprintf(stderr, "3DES key imported successfully\n");
+			fprintf(stderr, "Attempting decryption with 3-key 3DES-CBC...\n");
+			fprintf(stderr, "Encrypted data: %d bytes\n", encryptedDataLen);
+			fprintf(stderr, "IV: ");
+			for (int i = 0; i < 8; i++)
+				fprintf(stderr, "%02X ", iv[i]);
+			fprintf(stderr, "\n\n");
 
 
-		BCRYPT_KEY_DATA_BLOB_HEADER* pKeyDataHeader = (BCRYPT_KEY_DATA_BLOB_HEADER*)keyData;
-		pKeyDataHeader->dwMagic = BCRYPT_KEY_DATA_BLOB_MAGIC;
-		pKeyDataHeader->dwVersion = BCRYPT_KEY_DATA_BLOB_VERSION1;
-		pKeyDataHeader->cbKeyData = 192 / 8;
+			bStatus = BCryptDecrypt(derivedKeyHandle, pEncryptedData, encryptedDataLen, NULL,
+				iv, 8, decrypted, 168, &cbOutput, BCRYPT_BLOCK_PADDING);
 
-		fprintf(stderr, "\nImporting 3DES key...\n");
-		fprintf(stderr, "Key header magic: 0x%08X\n", pKeyDataHeader->dwMagic);
-		fprintf(stderr, "Key header version: %d\n", pKeyDataHeader->dwVersion);
-		fprintf(stderr, "Key data length: %d bytes\n", pKeyDataHeader->cbKeyData);
+			if (evaluateBStatus(bStatus) != 0)
+			{
+				fprintf(stderr, "Decryption failed\n");
+				BCryptDestroyKey(derivedKeyHandle);
+				LocalFree(pEncryptedKeyInfo);
+				return 0;
 
-		fprintf(stderr, "Key1 (DES key 1): ");
-		for (int i = 0; i < 8; i++)
-			fprintf(stderr, "%02X ", ((unsigned char*)keyData)[sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + i]);
-		fprintf(stderr, "\nKey2 (DES key 2): ");
-		for (int i = 8; i < 16; i++)
-			fprintf(stderr, "%02X ", ((unsigned char*)keyData)[sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + i]);
-		fprintf(stderr, "\nKey3 (DES key 3): ");
-		for (int i = 16; i < 24; i++)
-			fprintf(stderr, "%02X ", ((unsigned char*)keyData)[sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + i]);
-		fprintf(stderr, "\n\n");
-
-
-		bStatus = BCryptImportKey(algHandle, NULL, BCRYPT_KEY_DATA_BLOB, &derivedKeyHandle, NULL, 0,
-			(PUCHAR)keyData, sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + 192 / 8, 0);
-		if (evaluateBStatus(bStatus) != 0)
-		{
-			fprintf(stderr, "BCryptImportKey failed\n");
-			LocalFree(pEncryptedKeyInfo);
-			return 0;
-		}
-
-		fprintf(stderr, "3DES key imported successfully\n");
-		fprintf(stderr, "Attempting decryption with 3-key 3DES-CBC...\n");
-		fprintf(stderr, "Encrypted data: %d bytes\n", encryptedDataLen);
-		fprintf(stderr, "IV: ");
-		for (int i = 0; i < 8; i++)
-			fprintf(stderr, "%02X ", iv[i]);
-		fprintf(stderr, "\n\n");
-
-
-		bStatus = BCryptDecrypt(derivedKeyHandle, pEncryptedData, encryptedDataLen, NULL,
-			iv, 8, decrypted, 168, &cbOutput, BCRYPT_BLOCK_PADDING);
-
-		if (evaluateBStatus(bStatus) != 0)
-		{
-			fprintf(stderr, "Decryption failed\n");
+			}
 			BCryptDestroyKey(derivedKeyHandle);
-			LocalFree(pEncryptedKeyInfo);
-			return 0;
-
-		}
-		BCryptDestroyKey(derivedKeyHandle);
 
 			
-		// Save the decrypted data as DER file
-		HANDLE hKeyFile = CreateFile(L"DecryptedPrivateKey.der", GENERIC_WRITE, 0, NULL,
-			CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-		WriteFile(hKeyFile, decrypted, cbOutput, &written, NULL);
-		CloseHandle(hKeyFile);
+			// Save the decrypted data as DER file
+			HANDLE hKeyFile = CreateFile(L"DecryptedPrivateKey.der", GENERIC_WRITE, 0, NULL,
+				CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+			WriteFile(hKeyFile, decrypted, cbOutput, &written, NULL);
+			CloseHandle(hKeyFile);
 
-		fprintf(stderr, "\nSaved decrypted data to DecryptedPrivateKey.der\n");
+			fprintf(stderr, "\nSaved decrypted data to DecryptedPrivateKey.der\n");
 
-		LocalFree(pEncryptedKeyInfo);
+			LocalFree(pEncryptedKeyInfo);
+			CRYPT_PRIVATE_KEY_INFO* pDecryptedKey = NULL;
+			cbDecoded = 0;
+
+			BOOL decodeResult = CryptDecodeObjectEx(
+				X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
+				PKCS_PRIVATE_KEY_INFO,
+				decrypted,
+				cbOutput,
+				CRYPT_DECODE_ALLOC_FLAG,
+				NULL,
+				&pDecryptedKey,
+				&cbDecoded);
+			if (decodeResult && pDecryptedKey)
+			{
+				fprintf(stderr, "=== Successfully decoded decrypted PrivateKeyInfo ===\n");
+				fprintf(stderr, "Algorithm OID: %s\n", pDecryptedKey->Algorithm.pszObjId);
+				fprintf(stderr, "Private key size: %d\n", pDecryptedKey->PrivateKey.cbData);
+				fprintf(stderr, "Number of attributes: %d\n", pDecryptedKey->pAttributes->cAttr);
+				fprintf(stderr, "Attributes OID: %s\n", pDecryptedKey->pAttributes->rgAttr[0].pszObjId);
+				fprintf(stderr, "Attributes number: %d\n", pDecryptedKey->pAttributes->rgAttr[0].cValue);
+				if (pDecryptedKey->pAttributes && pDecryptedKey->pAttributes->cAttr > 0)
+				{
+					fprintf(stderr, "Number of attributes: %d\n", pDecryptedKey->pAttributes->cAttr);
+
+					for (DWORD attrIdx = 0; attrIdx < pDecryptedKey->pAttributes->cAttr; attrIdx++)
+					{
+						fprintf(stderr, "\n--- Attribute[%d] ---\n", attrIdx);
+						fprintf(stderr, "Attribute OID: %s\n", pDecryptedKey->pAttributes->rgAttr[attrIdx].pszObjId);
+						fprintf(stderr, "Attribute value count: %d\n", pDecryptedKey->pAttributes->rgAttr[attrIdx].cValue);
+						if (strcmp(pDecryptedKey->pAttributes->rgAttr[attrIdx].pszObjId, "2.5.29.15") == 0)
+						{
+							fprintf(stderr, "Type: Key Usage Extension\n");
+
+							for (DWORD valIdx = 0; valIdx < pDecryptedKey->pAttributes->rgAttr[attrIdx].cValue; valIdx++)
+							{
+								DWORD valueSize = pDecryptedKey->pAttributes->rgAttr[attrIdx].rgValue[valIdx].cbData;
+								BYTE* valueData = pDecryptedKey->pAttributes->rgAttr[attrIdx].rgValue[valIdx].pbData;
+
+								fprintf(stderr, "Attribute value size: %d bytes\n", valueSize);
+								fprintf(stderr, "Raw value hex: ");
+								for (DWORD i = 0; i < valueSize; i++)
+									fprintf(stderr, "%02X ", valueData[i]);
+								fprintf(stderr, "\n");
+
+								// Decode as BIT STRING
+								CRYPT_BIT_BLOB* pKeyUsage = NULL;
+								DWORD cbKeyUsage = 0;
+
+								if (CryptDecodeObjectEx(
+									X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
+									X509_BITS,
+									valueData,
+									valueSize,
+									CRYPT_DECODE_ALLOC_FLAG,
+									NULL,
+									&pKeyUsage,
+									&cbKeyUsage))
+								{
+									fprintf(stderr, "\n=== Key Usage Flags ===\n");
+									if (pKeyUsage->cbData > 0)
+									{
+										BYTE usageByte1 = pKeyUsage->pbData[0];
+
+										if (usageByte1 & 0x80) fprintf(stderr, "  [X] digitalSignature (0x80)\n");
+										else fprintf(stderr, "  [ ] digitalSignature\n");
+
+										if (usageByte1 & 0x40) fprintf(stderr, "  [X] nonRepudiation (0x40)\n");
+										else fprintf(stderr, "  [ ] nonRepudiation\n");
+
+										if (usageByte1 & 0x20) fprintf(stderr, "  [X] keyEncipherment (0x20)\n");
+										else fprintf(stderr, "  [ ] keyEncipherment\n");
+
+										if (usageByte1 & 0x10) fprintf(stderr, "  [X] dataEncipherment (0x10)\n");
+										else fprintf(stderr, "  [ ] dataEncipherment\n");
+
+										if (usageByte1 & 0x08) fprintf(stderr, "  [X] keyAgreement (0x08)\n");
+										else fprintf(stderr, "  [ ] keyAgreement\n");
+
+										if (usageByte1 & 0x04) fprintf(stderr, "  [X] keyCertSign (0x04)\n");
+										else fprintf(stderr, "  [ ] keyCertSign\n");
+
+										if (usageByte1 & 0x02) fprintf(stderr, "  [X] cRLSign (0x02)\n");
+										else fprintf(stderr, "  [ ] cRLSign\n");
+
+										if (usageByte1 & 0x01) fprintf(stderr, "  [X] encipherOnly (0x01)\n");
+										else fprintf(stderr, "  [ ] encipherOnly\n");
+
+										// Second byte (if present)
+										if (pKeyUsage->cbData > 1)
+										{
+											BYTE usageByte2 = pKeyUsage->pbData[1];
+											if (usageByte2 & 0x80) fprintf(stderr, "  [X] decipherOnly (0x8000)\n");
+											else fprintf(stderr, "  [ ] decipherOnly\n");
+										}
+									}
+									LocalFree(pKeyUsage);
+								}
+								else
+								{
+									fprintf(stderr, "Failed to decode Key Usage BIT STRING: 0x%08X\n", GetLastError());
+								}
+							}
+						}
+						else
+						{
+							fprintf(stderr, "Type: Other attribute\n");
+						}
+					}
+				}
+				fprintf(stderr, "Private key: ");
+				for (DWORD i = 0; i < pDecryptedKey->PrivateKey.cbData; i++)
+					fprintf(stderr, "%02X ", pDecryptedKey->PrivateKey.pbData[i]);
+				fprintf(stderr, "\n");
+				CRYPT_ECC_PRIVATE_KEY_INFO* pEccKey = NULL;
+				decodeResult = CryptDecodeObjectEx(
+					X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
+					X509_ECC_PRIVATE_KEY,
+					pDecryptedKey->PrivateKey.pbData,
+					pDecryptedKey->PrivateKey.cbData,
+					CRYPT_DECODE_ALLOC_FLAG,
+					NULL,
+					&pEccKey,
+					&cbDecoded);
+				if (decodeResult && pEccKey)
+				{
+					fprintf(stderr, "\n=== Successfully decoded ECC Private Key Blob ===\n");
+					fprintf(stderr, "ECC Private key size: %d\n", pEccKey->PrivateKey.cbData);
+					fprintf(stderr, "ECC Private key: ");
+					for (DWORD i = 0; i < pEccKey->PrivateKey.cbData; i++)
+						fprintf(stderr, "%02X ", pEccKey->PrivateKey.pbData[i]);
+					fprintf(stderr, "\n");
+				}
+				else
+				{
+					fprintf(stderr, "Failed to decode ECC Private Key Blob: %x\n", GetLastError());
+				}
+				if (pEccKey->PublicKey.cbData > 0)
+				{
+					fprintf(stderr, "\n=== ECC Public Key (from PrivateKeyInfo) ===\n");
+					fprintf(stderr, "Public key size: %d bytes\n", pEccKey->PublicKey.cbData);
+					fprintf(stderr, "Public key unused bits: %d\n", pEccKey->PublicKey.cUnusedBits);
+					if (pEccKey->PublicKey.pbData[0] == 0x04)
+					{
+						fprintf(stderr, "Format: Uncompressed point\n");
+
+						// Calculate coordinate size (excluding the 0x04 byte)
+						DWORD coordSize = (pEccKey->PublicKey.cbData - 1) / 2;
+
+						fprintf(stderr, "X coordinate (%d bytes):\n", coordSize);
+						for (DWORD i = 1; i <= coordSize; i++)
+							fprintf(stderr, "%02X ", pEccKey->PublicKey.pbData[i]);
+
+						fprintf(stderr, "\nY coordinate (%d bytes):\n", coordSize);
+						for (DWORD i = coordSize + 1; i < pEccKey->PublicKey.cbData; i++)
+							fprintf(stderr, "%02X ", pEccKey->PublicKey.pbData[i]);
+
+						fprintf(stderr, "\n");
+					}
+					else if (pEccKey->PublicKey.pbData[0] == 0x02)
+					{
+						fprintf(stderr, "Format: Compressed point (Y is even)\n");
+						fprintf(stderr, "X coordinate:\n");
+						for (DWORD i = 1; i < pEccKey->PublicKey.cbData; i++)
+							fprintf(stderr, "%02X ", pEccKey->PublicKey.pbData[i]);
+						fprintf(stderr, "\n");
+					}
+					else if (pEccKey->PublicKey.pbData[0] == 0x03)
+					{
+						fprintf(stderr, "Format: Compressed point (Y is odd)\n");
+						fprintf(stderr, "X coordinate:\n");
+						for (DWORD i = 1; i < pEccKey->PublicKey.cbData; i++)
+							fprintf(stderr, "%02X ", pEccKey->PublicKey.pbData[i]);
+						fprintf(stderr, "\n");
+					}
+					else
+					{
+						fprintf(stderr, "Unknown point format: 0x%02X\n", pEccKey->PublicKey.pbData[0]);
+					}
+				}
+
+			}
+			else
+			{
+				fprintf(stderr, "Failed to decode decrypted PrivateKeyInfo: %x\n", GetLastError());
+			}
+			LocalFree(pDecryptedKey);
+
+
 		}
 
 		return 0;
