@@ -348,18 +348,20 @@ int main(int argc, char* argv[])
 	bufferDesc.ulVersion = NCRYPTBUFFER_VERSION;
 	bufferDesc.pBuffers[0].BufferType = NCRYPTBUFFER_PKCS_SECRET;
 	bufferDesc.pBuffers[0].pvBuffer = (PVOID)password;
-	bufferDesc.pBuffers[0].cbBuffer = 18;
+	bufferDesc.pBuffers[0].cbBuffer = (ULONG)(wcslen(password)+1) * sizeof(wchar_t);
 	bufferDesc.pBuffers[1].BufferType = NCRYPTBUFFER_PKCS_ALG_OID;
 	bufferDesc.pBuffers[1].pvBuffer = (void*)"1.2.840.113549.1.12.1.3\0";
+//	bufferDesc.pBuffers[1].pvBuffer = (void*)"1.2.840.113549.1.5.12\0";
+//	bufferDesc.pBuffers[1].pvBuffer = (void*)"1.2.840.113549.2.9\0";
+//	bufferDesc.pBuffers[1].pvBuffer = (void*)"2.16.840.1.101.3.4.1.42\0";
+
 	bufferDesc.pBuffers[1].cbBuffer = (ULONG)(strlen((const char*)bufferDesc.pBuffers[1].pvBuffer) + 1);
 	//bufferDesc.pBuffers[2].BufferType = NCRYPTBUFFER_PKCS_ALG_OID;
 	//bufferDesc.pBuffers[2].pvBuffer = (void*)"1.2.840.113549.1.5.12\0";
 	//bufferDesc.pBuffers[2].cbBuffer = (ULONG)(strlen((const char*)bufferDesc.pBuffers[2].pvBuffer) + 1);
 	//bufferDesc.pBuffers[3].BufferType = NCRYPTBUFFER_PKCS_ALG_OID;
-	//bufferDesc.pBuffers[3].pvBuffer = (void*)"1.2.840.113549.2.9\0";
 	//bufferDesc.pBuffers[3].cbBuffer = (ULONG)(strlen((const char*)bufferDesc.pBuffers[3].pvBuffer) + 1);
 	//bufferDesc.pBuffers[4].BufferType = NCRYPTBUFFER_PKCS_ALG_OID;
-	//bufferDesc.pBuffers[4].pvBuffer = (void*)"2.16.840.1.101.3.4.1.42\0";
 	//bufferDesc.pBuffers[4].cbBuffer = (ULONG)(strlen((const char*)bufferDesc.pBuffers[4].pvBuffer) + 1);
 
 
@@ -527,7 +529,7 @@ int main(int argc, char* argv[])
 						// Derive key (ID=1)
 						PKCS12_KDF(
 							password,
-							16,  // 8 characters * 2 bytes per wchar_t
+							(ULONG)wcslen(password) * sizeof(wchar_t),
 							extractedSalt,
 							saltLen,
 							iterations,
@@ -538,7 +540,7 @@ int main(int argc, char* argv[])
 						// Derive IV (ID=2)
 						PKCS12_KDF(
 							password,
-							16,
+							(ULONG)wcslen(password) * sizeof(wchar_t),
 							extractedSalt,
 							saltLen,
 							iterations,
@@ -553,9 +555,9 @@ int main(int argc, char* argv[])
 			{
 
 				// Fall back to defaults
-				PKCS12_KDF(password, 16, NULL, 0, 0, 1,
+				PKCS12_KDF(password, (ULONG)(wcslen(password)) * sizeof(wchar_t), NULL, 0, 0, 1,
 					(PUCHAR)keyData + sizeof(BCRYPT_KEY_DATA_BLOB_HEADER), 192 / 8);
-				PKCS12_KDF(password, 16, NULL, 0, 0, 2, iv, 8);
+				PKCS12_KDF(password, (ULONG)(wcslen(password)) * sizeof(wchar_t), NULL, 0, 0, 2, iv, 8);
 			}
 
 
